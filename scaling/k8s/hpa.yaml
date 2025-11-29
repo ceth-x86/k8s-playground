@@ -1,0 +1,42 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: simple-app-hpa
+spec:
+  # The target resource to scale
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: simple-app-deployment
+  
+  # Scaling limits
+  minReplicas: 2
+  maxReplicas: 10
+  
+  # Metric to use for scaling
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: requests_per_minute
+      target:
+        type: AverageValue
+        # HPA will scale up if the average is above this value, and scale down if below.
+        averageValue: "3" # Target average value of 3 requests per minute per pod
+  
+  # Scaling behavior policies
+  behavior:
+    scaleUp:
+      # No stabilization window for scale up (react immediately)
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 15 # Add 2 pods every 15 seconds if the threshold is breached
+    scaleDown:
+      # Wait 5 minutes before scaling down to avoid thrashing
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60 # Remove 1 pod every 60 seconds if below the threshold

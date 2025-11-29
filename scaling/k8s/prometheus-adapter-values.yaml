@@ -1,0 +1,22 @@
+prometheus:
+  # URL and port of the Prometheus service
+  url: http://prometheus-service.default.svc
+  port: 9090
+
+rules:
+  custom:
+  # Configuration for the custom metric "requests_per_minute"
+  - seriesQuery: '{__name__="requests_per_minute"}' # Query to discover the metric series
+    resources:
+      overrides:
+        # Map Prometheus labels to Kubernetes resources
+        kubernetes_namespace: {resource: "namespace"}
+        kubernetes_pod_name: {resource: "pod"}
+    name:
+      # How the metric will be exposed in the custom metrics API
+      matches: "requests_per_minute"
+      as: "requests_per_minute"
+    # PromQL query to calculate the metric value
+    # <<.Series>> is replaced by the seriesQuery result
+    # <<.LabelMatchers>> is replaced by the label matchers for the specific resource
+    metricsQuery: 'avg(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'

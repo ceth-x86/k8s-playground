@@ -16,77 +16,127 @@ Prometheus operates on a "pull" model for collecting metrics. This means:
 
 This pull model simplifies application configuration, centralizes control at the Prometheus server, and provides clear visibility when an application or metric endpoint becomes unavailable.
 
-## Deployment to Kubernetes with Prometheus
+## Horizontal Pod Autoscaling (HPA) with Custom Metrics
 
-Follow these steps to deploy the application and Prometheus to your Kubernetes cluster:
+This section explains how to configure a Horizontal Pod Autoscaler (HPA) to automatically scale your `simple-app-deployment` based on the custom `requests_per_minute` metric we are exposing.
 
-### Prerequisites
+### Prerequisites for HPA
 
-*   A running Kubernetes cluster.
-*   `kubectl` configured to communicate with your cluster.
-*   Docker installed and configured.
+The HPA needs a way to access custom metrics from Prometheus. This is achieved by deploying the Prometheus Adapter.
 
-### 1. Build and Push Docker Image
+#### 1. Install Prometheus Adapter
 
-Navigate to the `scaling/app` directory and build your Docker image. Replace `your-docker-username` with your Docker Hub username and `your-image-name` with a name for your application image (e.g., `my-scaling-app`).
+The Prometheus Adapter queries Prometheus for your custom metrics and exposes them through the Kubernetes Custom Metrics API, which the HPA can then access.
 
-```bash
-cd scaling/app
-docker build -t your-docker-username/k8s-scaling:latest .
-docker push your-docker-username/k8s-scaling:latest
-```
-
-**Note:** If you are using a local Kubernetes cluster like Minikube or Kind, you might need to load the image into the cluster's Docker daemon instead of pushing to a remote registry.
-For Minikube:
-```bash
-eval $(minikube docker-env)
-docker build -t k8s-scaling:latest .
-```
-Then, update `scaling/k8s/deployment.yaml` to use `image: k8s-scaling:latest` and `imagePullPolicy: Never`.
-
-### 2. Update Kubernetes Deployment YAML
-
-Before applying, ensure the `image` field in `scaling/k8s/deployment.yaml` points to the image you just pushed.
-
-Open `scaling/k8s/deployment.yaml` and change:
+First, create a `prometheus-adapter-values.yaml` file in the `scaling/k8s/` directory with the following content. This file configures the adapter to find your `requests_per_minute` metric:
 ```yaml
-        image: simple-app:latest
-```
-to:
-```yaml
-        image: your-docker-username/k8s-scaling:latest
+prometheus:
+  url: http://prometheus-service.default.svc
+  port: 9090
+
+rules:
+  custom:
+  - seriesQuery: '{__name__="requests_per_minute"}'
+    resources:
+      overrides:
+        kubernetes_namespace: {resource: "namespace"}
+        kubernetes_pod_name: {resource: "pod"}
+    name:
+      matches: "requests_per_minute"
+      as: "requests_per_minute"
+    metricsQuery: 'avg(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
 ```
 
-### 3. Apply Kubernetes Manifests
-
-Apply all the Kubernetes configuration files located in the `scaling/k8s` directory. This will deploy your application and Prometheus.
+Next, add the `prometheus-community` Helm repository:
 
 ```bash
-kubectl apply -f scaling/k8s/
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
 ```
 
-### 4. Verify Deployment and Access Prometheus
+Finally, install the Prometheus Adapter using Helm and your custom values file. If you have an existing release named `prometheus-adapter`, use `helm upgrade` instead of `helm install`:
+```bash
+# For a new installation:
+helm install prometheus-adapter prometheus-community/prometheus-adapter -f scaling/k8s/prometheus-adapter-values.yaml
 
-1.  **Check Pod Status:**
-    ```bash
-    kubectl get pods
-    ```
-    Ensure that your application pods (e.g., `simple-app-deployment-...`) and the Prometheus pod (`prometheus-deployment-...`) are running.
+# To upgrade an existing installation:
+helm upgrade prometheus-adapter prometheus-community/prometheus-adapter -f scaling/k8s/prometheus-adapter-values.yaml
+```
+After a few minutes, the adapter will be running and exposing your custom metric to the Kubernetes API.
 
-2.  **Access Application:**
-    Get the external IP of your application's load balancer service:
-    ```bash
-    kubectl get services
-    ```
-    Look for `simple-app-service-lb` and find its `EXTERNAL-IP`. You can then access your application in a web browser using `http://EXTERNAL-IP/`.
+#### 2. Create the HorizontalPodAutoscaler (HPA)
 
-3.  **Access Prometheus UI:**
-    Get the external IP of the Prometheus load balancer service:
-    ```bash
-    kubectl get services
-    ```
-    Look for `prometheus-service` and find its `EXTERNAL-IP`. You can then access the Prometheus UI in a web browser using `http://EXTERNAL-IP:9090`.
+Now, we can create the HPA resource. Create a file named `scaling/k8s/hpa.yaml` with the following content:
 
-    In the Prometheus UI, you can query for the `requests_per_minute` metric to observe the application's request rate.
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: simple-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: simple-app-deployment
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: requests_per_minute
+      target:
+        type: AverageValue
+        # HPA will scale up if the average is above this value, and scale down if below.
+        averageValue: "3" # Target average value of 3 requests per minute per pod
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 15 # Add 2 pods every 15 seconds if the threshold is breached
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60 # Remove 1 pod every 60 seconds if below the threshold
+```
+This HPA will maintain a minimum of 2 pods and scale up to a maximum of 10 pods, trying to keep the average `requests_per_minute` per pod at `3`.
+
+#### 3. Apply and Test the HPA
+
+Apply the HPA manifest to your cluster:
+```bash
+kubectl apply -f scaling/k8s/hpa.yaml
+```
+
+To observe the HPA in action, run the following command in a separate terminal:
+```bash
+kubectl get hpa simple-app-hpa --watch
+```
+
+##### Understanding HPA Target Values
+
+When observing the HPA status using `kubectl get hpa simple-app-hpa --watch`, pay attention to the `TARGETS` column. This column shows `Current Average / Target Average`.
+
+*   **Target Average:** This is the `averageValue` you configured in your `hpa.yaml` (in our case, `3`). The HPA aims to maintain this average `requests_per_minute` per pod.
+*   **Current Average:** This is the actual average `requests_per_minute` per pod that the HPA is reading from the Custom Metrics API.
+
+You might notice values in the "Current Average" part of the `TARGETS` column expressed with an "m" suffix (e.g., `73333m/3`). The "m" stands for "milli-" (one-thousandth). This is a standard Kubernetes notation for representing fractional values as whole numbers to avoid floating-point numbers in some contexts.
+
+For example:
+*   `73333m` means `73333 / 1000 = 73.333`
+*   `45300m` means `45300 / 1000 = 45.3`
+
+So, if `TARGETS` shows `73333m/3`, it means the current average is `73.333` requests per minute per pod, and the target is `3`. Because `73.333` is significantly higher than `3`, the HPA would scale up the number of replicas.
+
+To generate traffic and trigger the autoscaler, run this `curl` loop in another terminal:
+```bash
+while true; do curl http://<your-external-ip>/ > /dev/null; sleep 0.1; done
+# Replace <your-external-ip> with the IP of your simple-app-service-lb
+```
+As you generate traffic, you will see the `TARGETS` column in the HPA output increase, and the `REPLICAS` count will go up. When you stop the traffic, the `TARGETS` will decrease, and after the stabilization window, the `REPLICAS` count will go down.
 
 Feel free to open issues or contribute to improve this setup.
