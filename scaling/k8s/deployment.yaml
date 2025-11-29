@@ -11,12 +11,16 @@ spec:
       app: simple-app
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5001"
+        prometheus.io/path: "/metrics"
       labels:
         app: simple-app
     spec:
       containers:
       - name: simple-app
-        image: simple-app:latest
+        image: k8s-scaling:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5001
