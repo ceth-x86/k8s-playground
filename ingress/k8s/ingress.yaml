@@ -4,6 +4,13 @@ metadata:
   name: simple-app-ingress
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - simple-app.local
+    secretName: simple-app-tls
+  - hosts:
+    - simple-app2.local
+    secretName: simple-app2-tls
   rules:
   - host: simple-app.local
     http:

@@ -80,12 +80,71 @@ In summary, the `ClusterIP` Service acts as a vital intermediary, providing a st
 ### Usage Example
 
 ```bash
-$ curl -H "Host: simple-app.local" http://192.168.139.2
+# Assuming YOUR_INGRESS_IP is the IP address of your Ingress controller
+# For simple-app.local
+$ curl -k -H "Host: simple-app.local" https://<YOUR_INGRESS_IP>
 {
   "current_datetime": "2025-11-30 12:00:03"
 }
-$ curl -H "Host: simple-app2.local" http://192.168.139.2
+
+# For simple-app2.local
+$ curl -k -H "Host: simple-app2.local" https://<YOUR_INGRESS_IP>
 {
   "current_datetime_app2": "2025-11-30 12:00:06"
 }
 ```
+
+### Generating Self-Signed TLS Certificates
+
+For demonstration purposes, self-signed TLS certificates were generated for `simple-app.local` and `simple-app2.local`. These certificates are used by the Ingress controller to enable HTTPS.
+
+To generate these certificates, the following `openssl` commands were used:
+
+```bash
+# For simple-app.local
+openssl req -x509 -newkey rsa:4096 -keyout ingress/cert/tls.key -out ingress/cert/tls.crt -days 365 -nodes -subj "/CN=simple-app.local/O=simple-app"
+
+# For simple-app2.local
+openssl req -x509 -newkey rsa:4096 -keyout ingress/cert/tls-app2.key -out ingress/cert/tls-app2.crt -days 365 -nodes -subj "/CN=simple-app2.local/O=simple-app2"
+```
+
+After generating the keys and certificates, Kubernetes TLS Secrets were created:
+
+```bash
+kubectl create secret tls simple-app-tls --key ingress/cert/tls.key --cert ingress/cert/tls.crt
+kubectl create secret tls simple-app2-tls --key ingress/cert/tls-app2.key --cert ingress/cert/tls-app2.crt
+```
+
+### Troubleshooting SSL Certificate Errors
+
+The "SSL certificate problem: unable to get local issuer certificate" error you're seeing is expected because you're using a self-signed TLS certificate.
+
+**Reason for the Error:**
+By default, tools like `curl` (and web browsers) expect to connect to servers that present a TLS certificate signed by a Certificate Authority (CA) that they implicitly trust. These trusted CAs are typically pre-installed on your operating system.
+Since we generated a *self-signed* certificate, it's not signed by any of these well-known, trusted CAs. Therefore, `curl` cannot verify its legitimacy and, for security reasons, it aborts the connection.
+
+**Workarounds for Local Testing:**
+
+1.  **Ignore SSL Certificate Validation (Insecure - for testing only!):**
+    You can tell `curl` to ignore SSL certificate validation errors using the `-k` or `--insecure` flag. This is convenient for testing in development environments but should **never** be used in production as it bypasses critical security checks.
+
+    ```bash
+    # For simple-app.local
+    curl -k -H "Host: simple-app.local" https://<YOUR_INGRESS_IP>
+
+    # For simple-app2.local
+    curl -k -H "Host: simple-app2.local" https://<YOUR_INGRESS_IP>
+    ```
+
+2.  **Explicitly Trust the Self-Signed Certificate:**
+    A more secure approach for local testing is to tell `curl` to explicitly trust your self-signed certificate (the one we generated, `ingress/cert/tls.crt` for `simple-app.local` and `ingress/cert/tls-app2.crt` for `simple-app2.local`) for this specific connection using the `--cacert` flag.
+
+    ```bash
+    # For simple-app.local (assuming you are in the mk8s/ directory)
+    curl --cacert ingress/cert/tls.crt -H "Host: simple-app.local" https://<YOUR_INGRESS_IP>
+
+    # For simple-app2.local (assuming you are in the mk8s/ directory)
+    curl --cacert ingress/cert/tls-app2.crt -H "Host: simple-app2.local" https://<YOUR_INGRESS_IP>
+    ```
+
+    *Remember to replace `<YOUR_INGRESS_IP>` with the actual IP address of your Ingress controller.*
