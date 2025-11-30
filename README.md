@@ -6,3 +6,4 @@ This project contains examples of Kubernetes deployments and scaling.
 
 *   **[Simple Application](./simple-app/README.md)**: A basic Flask application deployed to Kubernetes.
 *   **[Scaling Application](./scaling/README.md)**: A Flask application demonstrating horizontal scaling and Prometheus integration.
+*   **[Ingress Application](./ingress/README.md)**: Demonstrates how to use Kubernetes Ingress to route traffic to multiple applications.

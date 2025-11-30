@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: simple-app-deployment
+  name: simple-app2-deployment
   labels:
-    app: simple-app
+    app: simple-app2
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: simple-app
+      app: simple-app2
   template:
     metadata:
       labels:
-        app: simple-app
+        app: simple-app2
     spec:
       containers:
-      - name: simple-app
-        image: simple-app:latest
+      - name: simple-app2
+        image: simple-app2:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5001
@@ -43,10 +43,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: simple-app-service
+  name: simple-app2-service
 spec:
   selector:
-    app: simple-app
+    app: simple-app2
   ports:
     - protocol: TCP
       port: 80
