@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-app-deployment
+  labels:
+    app: simple-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: simple-app
+  template:
+    metadata:
+      labels:
+        app: simple-app
+    spec:
+      containers:
+      - name: simple-app
+        image: simple-app:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5001
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5001
+          initialDelaySeconds: 3
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 5001
+          initialDelaySeconds: 3
+          periodSeconds: 3
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-app-service-lb
+spec:
+  selector:
+    app: simple-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5001
+  type: LoadBalancer
