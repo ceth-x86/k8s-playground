@@ -1,23 +1,27 @@
 # Deploying to Kubernetes
 
-Kubernetes deployment files are provided in the `k8s/` directory.
+Kubernetes deployment files are provided in the `k8s/` directory. The new setup includes a MariaDB database and the stateful application.
 
-The deployment includes `liveness` and `readiness` probes, which Kubernetes uses to ensure the application is healthy and ready to receive traffic. It also includes resource `requests` and `limits` to manage CPU and memory allocation for the pods.
+The deployment includes:
+- A `Secret` to store MariaDB credentials.
+- A `PersistentVolumeClaim` to provide persistent storage for the MariaDB data.
+- A `Deployment` and `Service` for MariaDB.
+- A `Deployment` and `Service` for the stateful application.
+- `liveness` and `readiness` probes for both the application and the database.
 
-1.  **Rebuild your Docker image** to include the new health check endpoints (if you haven't already):
+1.  **Rebuild your Docker image**:
     ```bash
     cd app
-    docker build -t simple-app:latest .
-    cd .. 
+    docker build -t stateful-app:latest .
+    cd ..
     ```
 
 2.  **Ensure your Docker image is available to your cluster.**
-    If you are using a local cluster (like Minikube or OrbStack), you can often use the image you built locally. If you are using a cloud-based Kubernetes cluster, you will need to push your image to a container registry (like Docker Hub, GCR, or ECR) and update the `image` field in `k8s/deployment.yaml` accordingly.
-
-    For Minikube, you can load your local image directly into the cluster's Docker daemon:
+    If you are using a local cluster (like Minikube or OrbStack), you can often use the image you built locally. For Minikube, you can load your local image directly into the cluster's Docker daemon:
     ```bash
-    minikube image load simple-app:latest
+    minikube image load stateful-app:latest
     ```
+    If you are using a cloud-based Kubernetes cluster, you will need to push your image to a container registry and update the `image` field in `k8s/stateful-deployment.yaml`.
 
 3.  **Navigate to the Kubernetes directory**:
     ```bash
@@ -26,12 +30,16 @@ The deployment includes `liveness` and `readiness` probes, which Kubernetes uses
 
 4.  **Apply the Kubernetes configuration**:
     ```bash
-    kubectl apply -f deployment.yaml
+    kubectl apply -f stateful-deployment.yaml
     ```
-    This will update the Deployment to use the new image (if applicable) and include the probes, along with the defined resource requests and limits.
+    This will create all the necessary resources for the stateful application and the MariaDB database.
 
 5.  **Access the application**:
-    Depending on the service type you are using (`NodePort` or `LoadBalancer`), the access method will differ. Please refer to the `deployment.yaml` file in the `k8s/` directory to see which service is active.
+    The service type is `LoadBalancer`. Find the external IP with:
+    ```bash
+    kubectl get svc stateful-app-service-lb
+    ```
+    You can then access the application at `http://<EXTERNAL-IP>:80`.
 
-    *   **For `NodePort`**: Find the port with `kubectl get svc` and access `http://localhost:<NodePort>`.
-    *   **For `LoadBalancer`**: Find the IP with `kubectl get svc` and access `http://<EXTERNAL-IP>:80`.
+6.  **Access the requests endpoint**:
+    To see the last 10 requests, you can access `http://<EXTERNAL-IP>:80/requests`.
