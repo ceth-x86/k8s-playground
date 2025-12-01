@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fibonacci-worker-cronjob
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: fibonacci-worker
+            image: fibonacci-worker:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: REDIS_HOST
+              value: "redis-service"
+          restartPolicy: OnFailure

@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fibonacci-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: fibonacci-job
+        image: fibonacci-job:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: REDIS_HOST
+          value: "redis-service"
+      restartPolicy: Never
+  backoffLimit: 4

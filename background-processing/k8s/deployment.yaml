@@ -18,6 +18,9 @@ spec:
       - name: simple-app
         image: simple-app:latest
         imagePullPolicy: IfNotPresent
+        env:
+        - name: REDIS_HOST
+          value: "redis-service"
         ports:
         - containerPort: 5001
         livenessProbe:
