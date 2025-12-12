@@ -1,0 +1,157 @@
+# 1. NAMESPACE (Isolate our application)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+---
+
+# 2. DATABASE TIER (Redis)
+# We are not using the database in this version, but we'll keep it for now.
+# Deployment: manages database pods
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-redis
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-redis
+  template:
+    metadata:
+      labels:
+        app: db-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+        ports:
+        - containerPort: 6379
+---
+# Service (ClusterIP): Database access only within the cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-service
+  namespace: demo-app
+spec:
+  selector:
+    app: db-redis
+  type: ClusterIP # <-- Hidden from the outside world
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+---
+
+# 3. BACKEND TIER (API)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: demo-app
+spec:
+  replicas: 2 # Run 2 replicas for reliability
+  selector:
+    matchLabels:
+      app: backend-api
+  template:
+    metadata:
+      labels:
+        app: backend-api
+    spec:
+      containers:
+      - name: api
+        image: backend-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+---
+# Service (ClusterIP): Backend is also hidden, only frontend or Ingress can access it
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: demo-app
+spec:
+  selector:
+    app: backend-api
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 5000
+
+---
+
+# 4. FRONTEND TIER (WebApp)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-web
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-web
+  template:
+    metadata:
+      labels:
+        app: frontend-web
+    spec:
+      containers:
+      - name: webapp
+        image: frontend-web:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+---
+# Service (NodePort): You requested NodePort.
+# This will open a port on each "node" (Kind container).
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: demo-app
+spec:
+  selector:
+    app: frontend-web
+  type: NodePort # <-- Accessible from outside via a "high" port
+  ports:
+  - port: 80
+    targetPort: 3000
+    nodePort: 30080 # Fix the port so we don't have to search for it
+
+---
+
+# 5. INGRESS (Entry point)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: main-ingress
+  namespace: demo-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx # Specify that we are using Nginx Controller
+  rules:
+  - host: my-app.local # Fictional domain
+    http:
+      paths:
+      # /api traffic is sent to the backend (routing example)
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 80
+      # All other traffic is sent to the frontend
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80

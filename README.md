@@ -9,3 +9,4 @@ This project contains examples of Kubernetes deployments and scaling.
 *   **[Ingress Application](./ingress/README.md)**: Demonstrates how to use Kubernetes Ingress to route traffic to multiple applications.
 *   **[Stateful Application](./stateful-app/README.md)**: A Flask application with MariaDB integration, request logging, and a dedicated endpoint to view recent requests.
 *   **[Background Processing Application](./background-processing/README.md)**: A Flask application extended with Redis for background job management, including a Kubernetes Job and CronJob.
+*   **[KinD Simple Example](./kind-simple/README.md)**: A basic example of a multi-tier application deployed on a KinD cluster with Ingress.
