@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Frontend</title>
+</head>
+<body>
+    <h1>Hello from the Frontend!</h1>
+    <p>
+        <button id="fetch-btn">Fetch from Backend</button>
+    </p>
+    <p id="response"></p>
+
+    <script>
+        document.getElementById('fetch-btn').addEventListener('click', () => {
+            fetch('/api/hello')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('response').innerText = JSON.stringify(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    document.getElementById('response').innerText = 'Error fetching data.';
+                });
+        });
+    </script>
+</body>
+</html>
